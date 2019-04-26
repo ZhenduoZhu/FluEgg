@@ -68,6 +68,7 @@ end
 % The mortality model is under development
 alivemodel = 1;  %if alivemodel=1 the eggs would not die
 Exit = 0; %If we exit the code
+EggpassDS = 0; %ZZ Initially no egg has passed downstream boundary
 % =======================================================================
 
 %%ZZ EggID for batch simulation
@@ -84,9 +85,7 @@ try
     
     hFluEggGui = getappdata(0,'hFluEggGui');
     HECRAS_data=getappdata(hFluEggGui,'inputdata');
-    HECRAS_time_index=HECRAS_data.HECRASspawiningTimeIndex;%HEC-RAS spawning time index, different from
-    %spawning time. It is the same or previous date with hydraulic data.
-
+    
     date=arrayfun(@(x) datenum(x.Date,'ddmmyyyy HHMM'), HECRAS_data.Profiles);
     %Calculate Hydraulic Time step-->From HEC-RAS
     HDt=datestr(date(2)-date(1),'dd HH MM SS');
@@ -112,6 +111,10 @@ try
         SpawningTime=datenum(SpawningTime,'ddmmyyyy HHMM');
     end
     
+	HECRAS_time_index=find(date<=SpawningTime,1,'last'); %ZZ HECRAS_StartingTime will be found by spawningtime provided in batch excel file
+%%ZZ	HECRAS_time_index=HECRAS_data.HECRASspawiningTimeIndex;%HEC-RAS spawning time index, different from
+    %spawning time. It is the same or previous date with hydraulic data.
+
     %HEC-RAS date and time when spawning occours:
     HECRAS_StartingTime=date(HECRAS_time_index);%in days
     
@@ -822,13 +825,19 @@ Jump;
             egg_index=c(i);
             C=find(X(t,egg_index)<CumlDistance*1000,1,'first'); %Find the new cell where eggs are located
             %%=====================================================================
-            if isempty(C)  % If the egg is outside the domain
-                ed=errordlg([{'The cells domain have being exceeded.'},{'Please extend the River the domain in the River input file.'},{'Advice:'},{'1.  If your waterbody ends in a lake and you expect the eggs to settle, you can add an additional cell with Vmag=u*=very small value=1e-5m/s.'},{'2.  If your waterbody ends in a stream where you do not expect settling, you need to extend your domain by adding an additional cell with the stream hydrodynamics.'},{'3.  If the hydrodynamics after the last cell are approximately constant, you can extrapolate your domain by extending the cumulative distance of the last cell of your domain, use with caution.'}],'Error');
-                set(ed, 'WindowStyle', 'modal');
-                uiwait(ed);
-                msgbox(['Simulation time=', sprintf('%5.1f',time(t)/3600),'h, ','Mean X=',sprintf('%5.1f',mean(X(t-1,:))/1000),'km'],'FluEgg message','help');
-                Exit=1;
-                return
+            if isempty(C)  % If the egg is outside the domain, %ZZ allow model to continue
+				Cell=cell(egg_index); %ZZ
+				alive(t,egg_index) = 0; %ZZ
+%ZZ                ed=errordlg([{'The cells domain have being exceeded.'},{'Please extend the River the domain in the River input file.'},{'Advice:'},{'1.  If your waterbody ends in a lake and you expect the eggs to settle, you can add an additional cell with Vmag=u*=very small value=1e-5m/s.'},{'2.  If your waterbody ends in a stream where you do not expect settling, you need to extend your domain by adding an additional cell with the stream hydrodynamics.'},{'3.  If the hydrodynamics after the last cell are approximately constant, you can extrapolate your domain by extending the cumulative distance of the last cell of your domain, use with caution.'}],'Error');
+%ZZ                set(ed, 'WindowStyle', 'modal');
+%ZZ                uiwait(ed);
+%ZZ                msgbox(['Simulation time=', sprintf('%5.1f',time(t)/3600),'h, ','Mean X=',sprintf('%5.1f',mean(X(t-1,:))/1000),'km'],'FluEgg message','help');
+%ZZ                Exit=1;
+%ZZ                return
+                 if EggpassDS==0 %ZZ
+                     msgbox([{'Some egg passed the downstream boundary'},{'Please review river input file or decrease the simulation time if you want all eggs to be inside study domain.'}],'FluEgg message','Warn');
+                     EggpassDS=1;
+                 end
                 %                 if cellsExtended==0
                 %                     msgbox('The last cell was extended to allow the eggs to drift during the simulation time','FluEgg message','Warn');
                 %                     cellsExtended=1;
@@ -941,7 +950,7 @@ Jump;
 
         %display error for users
         if HECRAS_time_index<1||HECRAS_time_index>length(HECRAS_data.Profiles)
-                ed=errordlg([{'HEC-RAS simulation time error'},{'Please review HEC-RAS simulation time and make sure it is long enough to perform FluEgg simulation.'}],'Error');
+                ed=errordlg([{'HEC-RAS simulation time error'},{'Please review HEC-RAS simulation time and spawning time to make sure it is long enough to perform FluEgg simulation.'}],'Error');
                 set(ed, 'WindowStyle', 'modal');
                 uiwait(ed);
                 minDt = 0; %terminate the simulation
